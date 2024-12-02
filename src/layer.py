@@ -23,7 +23,7 @@ class Layer:
 
 class LayerManager:
     def __init__(self):
-        self.layers = {}
+        self.layers: dict[tuple[int, int], Layer] = {}
 
     def add_feature(self, position: tuple[int, int], feature: str, value: float):
         self.layers[position].add_feature(feature, value)
