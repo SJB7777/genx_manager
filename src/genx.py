@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 
 from src.layer import Layer, LayerManager
@@ -82,29 +84,46 @@ def convert_genx_to_lsfit(layers_manger: LayerManager, lsfit_input: str, lsfit_o
                 break
         lsfit_input_lines = file.readlines()
 
+    def modify_line(line: str) -> None | str:
+        if not line.strip():
+            return line
+        parts = line.split()
+        if not parts[0].isdigit():
+            return None
+        index, *parameter, value, _ = parts
+        if not index.isdigit() or parameter[-2] != 'part':
+            return line
+        position_str = " ".join(parameter[-3:])
+        position = (int(position_str[0]), int(position_str[-1]))
+        if position[0] == 0:
+            return line
+        name = " ".join(parameter[:-3])
+        layer = layers_manger.get_layer(position)
+
+        value: str | None = None
+        match name:
+            case "disp / n*b layer":
+                value = None
+            case "di_nb/beta layer":
+                value = None
+            case "sigma layer in A":
+                value = layer.features['setSigma']
+            case "layer thickness":
+                value = layer.features['setD']
+            case _:
+                raise ValueError(f'wrong feature name: ({name})')
+
+        formatted_value = "???" if value is None else f'{value:.6e}'
+        new_line = re.sub(r'\d+\.\d+', formatted_value, line, count=1)
+        return new_line
+
     # 데이터 추출
-    data = []
+    lsfit_lines = []
     for line in lsfit_input_lines:
-        if line.strip():
-            parts = line.split()
-            index, *parameter, value, increment = parts
-            if index.isdigit() and parameter[-2] == 'part':
-                index = int(index)
-                name = " ".join(parameter[:-3])
-                position_str = " ".join(parameter[-3:])
-                position = (int(position_str[0]), int(position_str[-1]))
-                layer = layers_manger.get_layer(position)
-                layer.substance
-
-                value = float(value)
-                increment = float(increment)
-            
-
-        else:
-            data.append(line)
-
-    print(data)
-
+        new_line = modify_line(line)
+        if new_line is None:
+            break
+        lsfit_lines.append(new_line)
 
     header: str = '''Parameter and refinement control file produced by  program LSFIT
 DBI G/N Text for X-axis(A20) Text for Y-axis(A20) REP       
@@ -115,27 +134,8 @@ I   N   z  [\\AA]             log(|FT\\{Int\\cdotq_{   1
 0        1         2         3         4         5         6         7         
 1234567890123456789012345678901234567890123456789012345678901234567890123456789
 '''
-    lsfit_lines: list[str] = []
-    index = 1
-    
-    return
-    if False:
-        parameter = row['parameter']
-        value = row['value']
-        fit = row['fit']
-        min_value = row['min']
-        max_value = row['max']
 
-        if pd.notna(parameter):  # NaN이 아닌 경우만 처리
-            increment = 0.0  # fit이 False인 경우 increment는 0으로 설정
-            if fit:
-                # fit이 True인 경우 increment를 적절히 설정 (예: 값의 10%로 설정)
-                increment = (max_value - min_value) * 0.1
-
-            lsfit_lines.append(f"{index:2d} {parameter:<30} {value:15.6e} {increment:15.6e}")
-            index += 1
-    
-    return header + '\n'.join(lsfit_lines) + tail
+    return header + ''.join(lsfit_lines) + tail
 
 
 def main() -> None:
@@ -147,14 +147,11 @@ def main() -> None:
     genx_df = read_genx_file(genx_file).dropna()
     layers_manger = genx_df_to_layer_manager(genx_df)
 
-    # 결과 출력
-    print("All layers sorted by position:")
-    for layer in layers_manger.list_layers():
-        print(layer)
+    new_lsfit = convert_genx_to_lsfit(layers_manger, lsfit_file, None)
 
-    # lsfit_df = read_lsfit_file(lsfit_file)
-
-    # print(genx_df)
+    new_lsfit_file = 'new_lsfit_sample.con'
+    with open(new_lsfit_file, 'w', encoding='utf-8') as f:
+        f.write(new_lsfit)
 
 
 if __name__ == '__main__':

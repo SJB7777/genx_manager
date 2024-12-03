@@ -12,7 +12,6 @@ class Layer:
         """기존 특성을 업데이트하는 메서드"""
         self.features.update(new_features)
 
-
     def __repr__(self):
         return f"Layer(substance={self.substance}, position={self.position}, features={self.features})"
 
